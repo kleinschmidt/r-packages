@@ -20,25 +20,13 @@ knitr::opts_chunk$set(message=FALSE,
 library(ggplot2)
 theme_set(theme_bw())
 
+devtools::load_all()
 
 ```
 
 ```{r read-data, cache=TRUE}
 
-data <-
-  read.csv('supunsup-ALL-visworld-anonymized.csv', header=TRUE) %>%
-  tbl_df %>%
-  separate(blockname, c('block', 'supCond', 'bvotCond'), sep='_', convert=TRUE) %>%
-  separate(listId, c('wordClass', 'respCategory', 'trialSupCond'), convert=TRUE) %>%
-  mutate(trialSupCond = factor(trialSupCond)) %>%
-  mutate(respCat = as.factor(substr(targetId, 1, 1))) %>%
-  mutate(respP = as.numeric(respCat=='p')) %>%
-  mutate(trueCat = respCategory) %>%
-  mutate(bvotCond = as.factor(bvotCond)) %>%
-  mutate(vot = as.numeric(str_extract(stimfn, '[-0-9]+'))) %>%
-  mutate(labeled = ifelse(supCond == 'unsupervised', 'unlabeled',
-                          ifelse(trialSupCond == 'unsupervised', 'unlabeled', 'labeled'))) %>%
-  select(-condition, -errors)
+data <- example::vot_adapt
 
 ```
 
