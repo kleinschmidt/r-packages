@@ -1,0 +1,54 @@
+```{r preamble, echo=FALSE, results='hide'}
+
+library(dplyr)
+library(devtools)
+
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE)
+
+```
+
+# Packing up your data
+
+## Motivation
+
+An R package is the basic unit of reproducible code. There are lots of reasons you might want to make one:
+
+1. As a "personal library" of functions that you use across lots of projects (by copying and pasting).
+2. For ctual software that you want to share with others so they can use it, too (things like `lme4`).
+3. To hold data from your experiments in a way that's easy to use, easy to share, and reproducibly tracks how the data was processed.
+
+This guide focuses on the third use case. There are lots of good guides for the first case ([Hilary Parker's](https://hilaryparker.com/2014/04/29/writing-an-r-package-from-scratch/) is the classic), and if you're in the second camp you probably already know what you're doing (and if not, Hadley Wickham's [R packages book](http://r-pkgs.had.co.nz/) is an excellent and thorough guide).
+
+We'll start from what used to be my default workflow (raw data file + R scripts to process and make figures etc.), and end up with an R package that allows you to both easily access pre-processed data and tracks how that data was generated from the raw form.
+
+## Preliminaries
+
+0. Install Rstudio.
+1. Install `devtools`
+2. Configure `devtools`: name, email address
+3. Have some data you want to package, plus code to read it into R and process it into a useable form (in a `.R` or `.Rmd` file, etc.)
+
+## What is a package?
+
+To a first approximation, a minimal package is a directory with some R code in `R/` and some metadata in `DESCRIPTION` (what the package is called, who made it, what it does, what other packages it depends on). When you load a package with `library` or `require`, R looks in the package directory and runs the stuff in `R/`.
+
+## Packages can contain data
+
+If there's a `data/` subdirectory in the package, R will also make any data files[^datafiles] there available by name. There are (at least) three ways to load data from a package:
+
+```{r loading-data}
+## using namespace
+ggplot2::diamonds %>% head()
+
+## using library() (doesn't import into the global environment)
+library(ggplot2)
+ls()
+diamonds %>% head()
+
+## using data() puts it into the global environment
+data("diamonds", package="ggplot2") 
+ls()
+```
+
+[^datafiles]: Data files can be lots of things: `.RData`, `.csv`, `.R`, etc. See `?data`.
