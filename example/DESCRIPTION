@@ -1,0 +1,8 @@
+Package: example
+Title: An example of a data package
+Version: 0.0.0.9000
+Authors@R: person("Dave", "Kleinschmidt", email = "dave.f.kleinschmidt@gmail.com", role = c("aut", "cre"))
+Description: Data and a sorta abstract.
+Depends: R (>= 3.2.3)
+License: MIT
+LazyData: true
