@@ -154,11 +154,13 @@ For our purposes, this isn't strictly necessary (if you're just doing `devtools:
 
 ## How do I put my data in the package
 
-### Manually
+### Manually (bad)
 
 1. Just move the data files (`.RData`, `.csv`, etc.) in the `data/` subdirectory of your package.
 
-### With `devtools`
+Bam, your data is in your package.
+
+### Mostly manually, with `devtools` (bad)
 
 1. Load the data into R, and do any processing you want.
 
@@ -194,3 +196,20 @@ For our purposes, this isn't strictly necessary (if you're just doing `devtools:
     devtools::use_data(experiment1_summary)
     ```
 
+### Reproducibly, with `devtools` (good)
+
+So far, we've been mucking around in the console. This is bad for the same reason that it's bad to do all your data analysis directly in the console: there's no record of what you've done, and there's no reliable way to reproduce it once you close R.
+
+The solution is the same: create a script that covers all the steps you took from beginning (loading that CSV) to end (`devtools::use_data()`). By including this script in your package along with the raw data, you get the convenience of having easy, fast access to the pre-processed data __and__ all the benefits of reproducibility.
+
+Hadley (as usual) has thought of this, and `devtools` provides `devtools::use_data_raw()` which creates the `data-raw/` subdirectory and suggests the next steps you should take:
+
+```{r eval=FALSE}
+devtools::use_data_raw()
+```
+```
+## Creating data-raw/
+## Next: 
+## * Add data creation scripts in data-raw
+## * Use devtools::use_data() to add data to package
+```
