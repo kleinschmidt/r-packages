@@ -1,0 +1,190 @@
+---
+title: Adapting to VOT distributions
+author: Dave F. Kleinschmidt
+---
+
+
+```{r preamble, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(magrittr)
+
+
+knitr::opts_chunk$set(message=FALSE,
+                      warning=FALSE,
+                      error=FALSE)
+
+
+library(ggplot2)
+theme_set(theme_bw())
+
+
+```
+
+```{r read-data, cache=TRUE}
+
+data <-
+  read.csv('supunsup-ALL-visworld-anonymized.csv', header=TRUE) %>%
+  tbl_df %>%
+  separate(blockname, c('block', 'supCond', 'bvotCond'), sep='_', convert=TRUE) %>%
+  separate(listId, c('wordClass', 'respCategory', 'trialSupCond'), convert=TRUE) %>%
+  mutate(trialSupCond = factor(trialSupCond)) %>%
+  mutate(respCat = as.factor(substr(targetId, 1, 1))) %>%
+  mutate(respP = as.numeric(respCat=='p')) %>%
+  mutate(trueCat = respCategory) %>%
+  mutate(bvotCond = as.factor(bvotCond)) %>%
+  mutate(vot = as.numeric(str_extract(stimfn, '[-0-9]+'))) %>%
+  mutate(labeled = ifelse(supCond == 'unsupervised', 'unlabeled',
+                          ifelse(trialSupCond == 'unsupervised', 'unlabeled', 'labeled'))) %>%
+  select(-condition, -errors)
+
+```
+
+```{r excludes}
+
+## detect repeat subjects
+repeat_subjects <-
+  data %>% 
+    group_by(assignmentid,submittime,subject) %>%
+    summarise() %>%
+    group_by(subject) %>%
+    mutate(rank=row_number(as.POSIXct(strptime(submittime, "%a %b %d %X EDT %Y")))) %>%
+    arrange(subject,submittime)
+
+
+## detect subjecs who don't classify well
+
+contrasts(data$trialSupCond) <-
+  matrix(c(1, -1), nrow=2,
+         dimnames = list(c('sup', 'unsup'), 'sup'))
+
+## Fit GLM to each subject/assignment
+bysub_withsup_glms <- data %>%
+  group_by(subject, assignmentid) %>%
+  do(fit = glm(respP ~ vot * trialSupCond, data=., family='binomial'))
+
+## Get fitted log-odds for 0ms and 70ms stimuli, find minimum correct log-odds,
+## and mark people for exclusion if the minimum correct less than logit(80%)
+bad_classification <-
+  bysub_withsup_glms %>%
+  mutate(lo0ms = coef(fit)[1], lo70ms = coef(fit)[1] + 70*coef(fit)[2]) %>%
+  select(subject, assignmentid, lo0ms, lo70ms) %>%
+  mutate(loMinCorrect = min(lo0ms * -1, lo70ms)) %>%
+  mutate(exclude80PercentAcc = loMinCorrect < qlogis(0.8))
+
+
+excludes <- full_join(filter(bad_classification, exclude80PercentAcc),
+                      filter(repeat_subjects, rank>1))
+
+data_clean <- data %>%
+  anti_join(excludes, by=c('subject', 'assignmentid')) %>%
+  filter(supCond == 'unsupervised') %>%
+  mutate(trueCat = respCategory,
+         subjNum = as.numeric(factor(subject)),
+         trueCatNum = as.numeric(trueCat),
+         respCatNum = as.numeric(respCat))
+
+n_subj <- data %>% group_by(subject) %>% summarise() %>% tally()
+
+```
+
+# Input distributions
+
+```{r plot-distributions, fig.width=8, fig.height=2}
+
+## prior parameters from Kronrod et al. (CogSci 2012)
+prior_stats <- data.frame(category=factor(c('b', 'p')),
+                          mean = c(0, 60),
+                          sd = sqrt(c(14, 254)))
+
+exposure_stats <- data %>%
+  group_by(bvotCond, category=trueCat) %>%
+  summarise(mean=mean(vot), sd=sd(vot))
+
+sd_noise = sqrt(82)
+
+stats_to_lhood <- function(stats, noise_sd=sd_noise) {
+  stats %>%
+    group_by(category, mean, sd) %>%
+    do(data.frame(vot=seq(-30, 90, 0.5))) %>%
+    ungroup() %>%
+    mutate(lhood = dnorm(vot, mean, sqrt(sd^2 + noise_sd^2))) %>%
+    select(-mean, -sd)
+}
+
+exposure_lhood <- exposure_stats %>%
+  group_by(bvotCond) %>%
+  do(stats_to_lhood(., sd_noise))
+
+prior_lhood <- prior_stats %>% stats_to_lhood(sd_noise)
+data_clean %>%
+  group_by(bvotCond, vot) %>%
+  filter(subject == first(subject)) %>%
+  tally() %>%
+  ggplot(aes(x=vot)) +
+  geom_bar(stat='identity', aes(y=n, fill=bvotCond)) +
+  geom_line(data=prior_lhood, aes(y=lhood*1600, group=category),
+            color="black", linetype=2) +
+  geom_text(data=data.frame(bvotCond=-10), x = 10, y = 60,
+            label = 'Typical Talker',
+            color='black', hjust=0, vjust=0.3, size=3) +
+  geom_text(data=data.frame(bvotCond=-10), x = 40, y = 50,
+            label = 'Exposure\nTalker',
+            color=hcl(h=15, c=100, l=65), hjust=0, vjust=0.8, size=3,
+            lineheight=1) +
+  geom_text(data=data.frame(bvotCond = 30,
+                            x = c(30, 70),
+                            y = 60,
+                            label = c('/b/', '/p/')),
+            aes(x=x, y=y, label=label),
+            color=hcl(h = 15 + 360/6*5, c=100, l=65),
+            hjust = 0.5, vjust = 0.5, size = 3) + 
+  facet_grid(.~bvotCond) +
+  scale_x_continuous('VOT (ms)') +
+  scale_y_continuous('Frequency') +
+  scale_fill_discrete('/b/ mean\nVOT') +
+  theme(legend.position='none')
+
+```
+
+# Classification functions
+
+```{r plot-classifications, fig.width=8, fig.height=2}
+
+lhood_to_classification <- function(lhood) {
+  lhood %>%
+    spread(category, lhood) %>%
+    mutate(prob_p = p / (p+b))
+}
+
+perfect_learning <- exposure_stats %>%
+  group_by(bvotCond) %>%
+  do(stats_to_lhood(.)) %>%
+  lhood_to_classification
+
+no_learning <- prior_stats %>%
+  stats_to_lhood %>%
+  lhood_to_classification
+
+prior_bound <- no_learning %>%
+  arrange(abs(prob_p - 0.5)) %>%
+  filter(row_number() ==1) %$%
+  vot
+
+
+ggplot(data_clean, aes(x=vot, y=respP, color=bvotCond)) +
+  geom_line(aes(group=subject), stat='smooth', method='glm',
+            method.args=list(family='binomial'), alpha=0.2) +
+  facet_grid(.~bvotCond) +
+  geom_line(data=perfect_learning, aes(y=prob_p), group=1, linetype=2, size=1) +
+  geom_line(data=no_learning, aes(y=prob_p), group=1, linetype=2, color='black') +
+  theme(legend.position='none') +
+  scale_x_continuous('VOT (ms)') +
+  scale_y_continuous('Probability /p/ response') + 
+  scale_color_discrete('/b/ mean\nVOT')
+
+```
+
+
