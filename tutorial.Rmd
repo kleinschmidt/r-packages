@@ -1,4 +1,4 @@
-```{r preamble, echo=FALSE, results='hide'}
+```{r preamble, echo=FALSE, results='hide', message=FALSE}
 
 library(dplyr)
 library(devtools)
@@ -24,31 +24,121 @@ We'll start from what used to be my default workflow (raw data file + R scripts 
 
 ## Preliminaries
 
-0. Install Rstudio.
-1. Install `devtools`
-2. Configure `devtools`: name, email address
+1. Install Rstudio.
+2. Install `devtools`
 3. Have some data you want to package, plus code to read it into R and process it into a useable form (in a `.R` or `.Rmd` file, etc.)
 
 ## What is a package?
 
-To a first approximation, a minimal package is a directory with some R code in `R/` and some metadata in `DESCRIPTION` (what the package is called, who made it, what it does, what other packages it depends on). When you load a package with `library` or `require`, R looks in the package directory and runs the stuff in `R/`.
+To a first approximation, a minimal package is 
+
+* a directory with 
+* some R code in `R/` and 
+* some metadata in `DESCRIPTION` (what the package is called, who made it, what it does, what other packages it depends on). 
+
+When you load a package with `library` or `require`, R looks in the package directory and runs the stuff`.R` files in `R/`.
 
 ## Packages can contain data
 
-If there's a `data/` subdirectory in the package, R will also make any data files[^datafiles] there available by name. There are (at least) three ways to load data from a package:
+If there's a `data/` subdirectory in the package directory, R will also make any data files[^datafiles] there available. In R, the dataset has the same name as the data file. There are (at least) three ways to access data from a package:
 
-```{r loading-data}
-## using namespace
+### Using package namespace
+```{r , }
 ggplot2::diamonds %>% head()
+```
 
-## using library() (doesn't import into the global environment)
+### With `library()`
+
+Then you can refer to datasets directly
+
+```{r , }
 library(ggplot2)
-ls()
 diamonds %>% head()
-
-## using data() puts it into the global environment
-data("diamonds", package="ggplot2") 
+```
+    
+But they're not added to the global environment:
+```{r , }
 ls()
 ```
 
+### With `data()`
+
+This puts the requested dataset into the global environment:
+
+```{r , }
+data("diamonds", package="ggplot2")
+ls()
+```
+
+You can also get a listing of all the datasets in a package with `data(package="ggplot2")`
+
 [^datafiles]: Data files can be lots of things: `.RData`, `.csv`, `.R`, etc. See `?data`.
+
+## How do I make a package
+
+### With RStudio (the easy way)
+
+1. Create the package skeleton
+    1. New Project -> New Directory -> R Package
+    2. Pick the name for your package (only letters, numbers, and `.`), and where it'll live locally (defaults to `~/`, your home directory). 
+    3. Check the "Create git repository" because why not.
+2. Click on the `DESCRIPTION` file, and edit it.
+3. Put your code files in the `R/` subdirectory.
+4. Load the package ("Build" tab, More -> Load all; or ⌘-⇧-L)
+
+### With `devtools` (the slightly less easy way)
+
+The `devtools` package is the back-end that RStudio uses to set up your package. It provides a convenient set of functions for doing those steps manually if you don't like clicking on buttons (or don't want to use RStudio):
+
+1. Create the package skeleton with `devtools::create('~/mypackage')`.
+2. Edit the information in `DESCRIPTION`.
+3. Put your code in the `R/` subdirectory.
+
+### Manually (the dangerous, masochistic way)
+
+You probably don't want to do this. These are the steps that `devtools` and RStudio automate for you.
+
+1. Create [the `DESCRIPTION` file](http://r-pkgs.had.co.nz/description.html) in your package-to-be directory.
+2. Create an `R/` subdirectory and put your code in there.
+3. Create the `man/` subdirectory and put your documentation `.Rd` files there (or generate using `devtools::document()`)
+
+## How do I put my data in the package
+
+### Manually
+
+1. Just move the data files (`.RData`, `.csv`, etc.) in the `data/` subdirectory of your package.
+
+### With `devtools`
+
+1. Load the data into R, and do any processing you want.
+
+    ```{r , eval=FALSE}
+    experiment1 <- read.csv('expt1.csv') %>% mutate(experiment = 1)
+    ```
+
+2. Add the dataset to the package with
+
+    ```{r , eval=FALSE}
+    devtools::use_data(experiment1)
+    ```
+
+    This saves `data/experiment1.RData` in your package directory (make sure you've `setwd()` to the package directory...)
+
+3. Now when you load the package, the dataset will be available as `experiment1`:
+
+    ```{r , eval=FALSE}
+    devtools::load_all()
+    data("experiment1")
+    ```
+
+4. You can save as many versions of the data as you'd like. For instance, if you want to have easy access to a sumamrized version of the dataset, you can save that, too:
+
+    ```{r , eval=FALSE}
+    experiment1_summary <- 
+      experiment1 %>%
+      group_by(subject, condition, block) %>%
+      summarise(mean_rt = mean(rt))
+
+    devtools::use_data(experiment1_summary)
+    ```
+
