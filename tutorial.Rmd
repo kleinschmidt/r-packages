@@ -109,7 +109,7 @@ The workflow when using a package is slightly different than you might be used t
 
 #### Local workflow
 
-If you're just working within the package directory, the steps are simple:
+If you're just working within the package directory, [the steps are simple](http://r-pkgs.had.co.nz/r.html#r-workflow):
 
 1. Edit code (or add data).
 2. Re-load packge with `devtools::load_all()` (or ⌘-⇧-L in RStudio)
@@ -160,30 +160,46 @@ For our purposes, this isn't strictly necessary (if you're just doing `devtools:
 
 Bam, your data is in your package.
 
-### Mostly manually, with `devtools` (bad)
+### Reproducibly, with `devtools` (good)
 
-1. Load the data into R, and do any processing you want.
+The version of the data that's worth packaging is probably not pure, raw data, but data that's been cleaned, proccessed, summarized, or collated in some way. Just dropping pre-processed data files into your package is bad for the same reason that it's bad to do all your data analysis directly in the console: there's no record of what you've done, and there's no reliable way to reproduce it once you close R.
 
-    ```{r , eval=FALSE}
-    experiment1 <- read.csv('expt1.csv') %>% mutate(experiment = 1)
+The solution is the same: create a script that covers all the steps you took from beginning (loading a CSV) to end (putting the final data files in `data/`). By including this script in your package along with the raw data, you get the convenience of having easy, fast access to the pre-processed data __and__ all the benefits of reproducibility.
+
+Here's how:
+
+1. Create a home for your raw raw data and preprocessing scripts to live in:
+
+    ```{r eval=FALSE}
+    devtools::use_data_raw()
+    ```
+    ```
+    ## Creating data-raw/
+    ## Next: 
+    ## * Add data creation scripts in data-raw
+    ## * Use devtools::use_data() to add data to package
     ```
 
-2. Add the dataset to the package with
+2. Move raw data into `data-raw/`
+3. Create an R script in `data-raw/` that reads in the raw data, processes it, and puts it where it belongs. Such a script might look like this:
 
     ```{r , eval=FALSE}
+    experiment1 <-
+      read.csv('expt1.csv') %>%
+      mutate(experiment = 1)
     devtools::use_data(experiment1)
     ```
 
     This saves `data/experiment1.RData` in your package directory (make sure you've `setwd()` to the package directory...)
 
-3. Now when you load the package, the dataset will be available as `experiment1`, already processed:
+3. Run this script to actually use the data (with `source()` or ⌘-⇧-S in RStudio). Now when you load the package, the dataset will be available as `experiment1`, already processed:
 
     ```{r , eval=FALSE}
     devtools::load_all()
+    experiment1 %>% head()
+    ## or use data() to put it in the global environment
     data("experiment1")
     ```
-
-    As a freebie bonus, `.RData` files are much faster to read from disk than text-based formats like `.csv`. So every time you use this data, you're saving a little bit of time (or a lot of time if your data is more than a few hundred megabytes). This reduces the friction associated with re-compiling your `.Rmd` files (say), or creating new sessions/`.Rmd` files for each analysis, which in turn makes it way easier to make sure your analysis is really reproducible and self-contained.
 
 4. You can save as many versions of the data as you'd like. For instance, if you want to have easy access to a sumamrized version of the dataset, you can save that, too:
 
@@ -196,20 +212,34 @@ Bam, your data is in your package.
     devtools::use_data(experiment1_summary)
     ```
 
-### Reproducibly, with `devtools` (good)
+5. (Optionally): commit the script in git. In my (and [Hadley's](http://r-pkgs.had.co.nz/git.html)) opinion, using git to track changes in your code is always a good idea, and it's integrated right into RStudio. 
 
-So far, we've been mucking around in the console. This is bad for the same reason that it's bad to do all your data analysis directly in the console: there's no record of what you've done, and there's no reliable way to reproduce it once you close R.
+    I also like to commit at least the processed data, and the raw data if it doesn't have personally identifiable information in it. You'll need to do this if you're going to distribute the package over github etc.  If the data files are very large, you can use something like [Git Large File Storage](https://github.com/blog/1986-announcing-git-large-file-storage-lfs).
 
-The solution is the same: create a script that covers all the steps you took from beginning (loading that CSV) to end (`devtools::use_data()`). By including this script in your package along with the raw data, you get the convenience of having easy, fast access to the pre-processed data __and__ all the benefits of reproducibility.
+6. (Optionally): [Document your datasets](http://r-pkgs.had.co.nz/data.html). This works basically the same as documenting other objects, with the exception that the object you document is the name of the data set. The convention is to put these in `R/data.R`:
 
-Hadley (as usual) has thought of this, and `devtools` provides `devtools::use_data_raw()` which creates the `data-raw/` subdirectory and suggests the next steps you should take:
+    ```{r , eval=FALSE}
+    #' Data from Experiment 1
+    #'
+    #' This is data from the first experiment ever to try XYZ using Mechanical
+    #' Turk workers.
+    #'
+    #' @format A data frame with NNNN rows and NN variables:
+    #' \describe{
+    #'   \item{subject}{Anonymized Mechanical Turk Worker ID}
+    #'   \item{trial}{Trial number, from 1..NNN}
+    #'   ...
+    #' }
+    "experiment1"
+    ```
 
-```{r eval=FALSE}
-devtools::use_data_raw()
-```
-```
-## Creating data-raw/
-## Next: 
-## * Add data creation scripts in data-raw
-## * Use devtools::use_data() to add data to package
-```
+    Writing this documentation is slightly annoying, but a __very good idea__ if you intend to share your data (and that includes with your advisor, students, labmates, or, especially, future-you)
+
+#### A few asides
+
+You can, of course, do all of this from the R console. But, again, for the sake of reproducibility, it's always better to put it in a script.
+
+These scripts doesn't _have_ to live in `data-raw/`, but that's where you put your raw data. And you don't want to run it every time the package is loaded, so __it shouldn't go in `R/`__.
+
+Even if you're packaging raw data, there's still a good reason to do it this way: `.RData` files are much faster to read from disk than text-based formats like CSV. So every time you use this data, you're saving a little bit of time (or a lot of time if your data is even medium sized). This reduces the friction associated with re-compiling your `.Rmd` files (say), or creating new sessions/`.Rmd` files for each analysis, which in turn makes it way easier to make sure your analysis is really reproducible and self-contained.
+
