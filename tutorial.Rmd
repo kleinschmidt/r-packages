@@ -1,3 +1,9 @@
+---
+title: Taking your data to go with R packages
+author: Dave F. Kleinschmidt
+date: 18 May, 2016
+---
+
 ```{r preamble, echo=FALSE, results='hide', message=FALSE}
 
 library(dplyr)
@@ -7,6 +13,27 @@ knitr::opts_chunk$set(warning = FALSE,
                       error = FALSE)
 
 ```
+
+This tutorial is hosted at [davekleinschmidt.com/r-packages/]().
+
+# TL;DR
+
+`devtools` makes it surprisingly easy to make a data package. There are lots of good reasons why you should (reproducibility, convenience, sharing, documenting). 
+
+1. `devtools::create()` the package skeleton
+2. `devtools::use_data_raw()` and move raw data into `data-raw/`
+3. Put data preprocessing script into `data-raw/`, which reads in raw data and at calls `devtools::use_data(<processed data>)` to save `.RData` formatted data files in `data/`.
+4. Load package with `devtools::load_all()` to access data
+5. Or install with `devtools::install()` and then `library(<package name>)`.
+
+The [Github repository](https://github.com/kleinschmidt/r-packages) includes the Rmd source, and an example of how I've refactored an analysis along these lines, starting from an [RMarkdown + CSV](https://github.com/kleinschmidt/r-packages/tree/f398971fab0388d5d35a392c7c9b46e74c307eb3/example) and ending up with an [RMarkdown + a package](https://github.com/kleinschmidt/r-packages/tree/c5e57de0b7ddc7968c8819fa904d00249934c055/example). 
+
+If you want a sense of how this might work IRL, the example is based on [this data package](https://github.com/kleinschmidt/phonetic-sup-unsup), which I've used for a couple of papers/presentations:
+
+* [CogSci2015](https://github.com/kleinschmidt/cogsci_2015)
+* [CUNY2015](https://github.com/kleinschmidt/cuny_2015)
+* [SVALP2016](https://github.com/kleinschmidt/svalp-2016)
+* [CogSci2016](https://github.com/kleinschmidt/cogsci_2016)
 
 # Packing up your data
 
