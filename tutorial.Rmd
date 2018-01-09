@@ -39,9 +39,9 @@ I've also compiled a few packages based on donated data to streamline my own
 workflow, some of which the originators of the data have generously agreed to
 release publicly:
 
-* [hVd F1 and F2 from the Nationwide Speech Projec](https://github.com/kleinschmidt/nspvowels)
+* [hVd F1 and F2 from the Nationwide Speech Project](https://github.com/kleinschmidt/nspvowels)
 * [F1, F2, and F3 distributions from Heald and Nusbaum (2015,
-  _PLoS_)](https://github.com/kleinschmidt/healdvowels]
+  _PLoS_)](https://github.com/kleinschmidt/healdvowels)
 * [word-intitial VOTs from a number of sources](https://github.com/kleinschmidt/votcorpora)
 
 # Packing up your data
