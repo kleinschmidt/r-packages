@@ -1,0 +1,17 @@
+language: r
+sudo: false
+os: linux
+cache: packages
+r_packages:
+  - rmarkdown
+  - dplyr
+  - devtools
+  - ggplot2
+script: make index.html
+deploy:
+  provider: pages
+  skip_cleanup: true
+  github_token: $GITHUB_TOKEN
+  on:
+    branch: master
+  target_branch: gh-pages
