@@ -1,0 +1,136 @@
+---
+title: Adapting to VOT distributions
+author: Dave F. Kleinschmidt
+---
+
+
+```{r preamble, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(magrittr)
+
+
+knitr::opts_chunk$set(message=FALSE,
+                      warning=FALSE,
+                      error=FALSE)
+
+
+library(ggplot2)
+theme_set(theme_bw())
+
+devtools::load_all()
+
+```
+
+```{r read-data, cache=TRUE}
+
+data_clean <- example::vot_adapt_clean %>%
+  filter(supCond == 'unsupervised') %>%
+  mutate(trueCat = respCategory,
+         subjNum = as.numeric(factor(subject)),
+         trueCatNum = as.numeric(trueCat),
+         respCatNum = as.numeric(respCat))
+  
+```
+
+
+# Input distributions
+
+```{r plot-distributions, fig.width=8, fig.height=2}
+
+## prior parameters from Kronrod et al. (CogSci 2012)
+prior_stats <- data.frame(category=factor(c('b', 'p')),
+                          mean = c(0, 60),
+                          sd = sqrt(c(14, 254)))
+
+exposure_stats <- data_clean %>%
+  group_by(bvotCond, category=trueCat) %>%
+  summarise(mean=mean(vot), sd=sd(vot))
+
+sd_noise = sqrt(82)
+
+stats_to_lhood <- function(stats, noise_sd=sd_noise) {
+  stats %>%
+    group_by(category, mean, sd) %>%
+    do(data.frame(vot=seq(-30, 90, 0.5))) %>%
+    ungroup() %>%
+    mutate(lhood = dnorm(vot, mean, sqrt(sd^2 + noise_sd^2))) %>%
+    select(-mean, -sd)
+}
+
+exposure_lhood <- exposure_stats %>%
+  group_by(bvotCond) %>%
+  do(stats_to_lhood(., sd_noise))
+
+prior_lhood <- prior_stats %>% stats_to_lhood(sd_noise)
+data_clean %>%
+  group_by(bvotCond, vot) %>%
+  filter(subject == first(subject)) %>%
+  tally() %>%
+  ggplot(aes(x=vot)) +
+  geom_bar(stat='identity', aes(y=n, fill=bvotCond)) +
+  geom_line(data=prior_lhood, aes(y=lhood*1600, group=category),
+            color="black", linetype=2) +
+  geom_text(data=data.frame(bvotCond=-10), x = 10, y = 60,
+            label = 'Typical Talker',
+            color='black', hjust=0, vjust=0.3, size=3) +
+  geom_text(data=data.frame(bvotCond=-10), x = 40, y = 50,
+            label = 'Exposure\nTalker',
+            color=hcl(h=15, c=100, l=65), hjust=0, vjust=0.8, size=3,
+            lineheight=1) +
+  geom_text(data=data.frame(bvotCond = 30,
+                            x = c(30, 70),
+                            y = 60,
+                            label = c('/b/', '/p/')),
+            aes(x=x, y=y, label=label),
+            color=hcl(h = 15 + 360/6*5, c=100, l=65),
+            hjust = 0.5, vjust = 0.5, size = 3) + 
+  facet_grid(.~bvotCond) +
+  scale_x_continuous('VOT (ms)') +
+  scale_y_continuous('Frequency') +
+  scale_fill_discrete('/b/ mean\nVOT') +
+  theme(legend.position='none')
+
+```
+
+# Classification functions
+
+```{r plot-classifications, fig.width=8, fig.height=2}
+
+lhood_to_classification <- function(lhood) {
+  lhood %>%
+    spread(category, lhood) %>%
+    mutate(prob_p = p / (p+b))
+}
+
+perfect_learning <- exposure_stats %>%
+  group_by(bvotCond) %>%
+  do(stats_to_lhood(.)) %>%
+  lhood_to_classification
+
+no_learning <- prior_stats %>%
+  stats_to_lhood %>%
+  lhood_to_classification
+
+prior_bound <- no_learning %>%
+  arrange(abs(prob_p - 0.5)) %>%
+  filter(row_number() ==1) %$%
+  vot
+
+
+ggplot(data_clean, aes(x=vot, y=respP, color=bvotCond)) +
+  geom_line(aes(group=subject), stat='smooth', method='glm',
+            method.args=list(family='binomial'), alpha=0.2) +
+  facet_grid(.~bvotCond) +
+  geom_line(data=perfect_learning, aes(y=prob_p), group=1, linetype=2, size=1) +
+  geom_line(data=no_learning, aes(y=prob_p), group=1, linetype=2, color='black') +
+  theme(legend.position='none') +
+  scale_x_continuous('VOT (ms)') +
+  scale_y_continuous('Probability /p/ response') + 
+  scale_color_discrete('/b/ mean\nVOT')
+
+```
+
+

@@ -1,0 +1,281 @@
+---
+title: Taking your data to go with R packages
+author: Dave F. Kleinschmidt
+date: 18 May, 2016
+---
+
+```{r preamble, echo=FALSE, results='hide', message=FALSE}
+
+library(magrittr)
+library(devtools)
+
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE)
+
+```
+
+This tutorial is hosted at [davekleinschmidt.com/r-packages/]().
+
+# TL;DR
+
+`devtools` makes it surprisingly easy to make a data package. There are lots of good reasons why you should (reproducibility, convenience, sharing, documenting). 
+
+1. `devtools::create()` the package skeleton
+2. `devtools::use_data_raw()` and move raw data into `data-raw/`
+3. Put data preprocessing script into `data-raw/`, which reads in raw data and at calls `devtools::use_data(<processed data>)` to save `.RData` formatted data files in `data/`.
+4. Load package with `devtools::load_all()` to access data
+5. Or install with `devtools::install()` and then `library(<package name>)`.
+
+The [Github repository](https://github.com/kleinschmidt/r-packages) includes the Rmd source, and an example of how I've refactored an analysis along these lines, starting from an [RMarkdown + CSV](https://github.com/kleinschmidt/r-packages/tree/f398971fab0388d5d35a392c7c9b46e74c307eb3/example) and ending up with an [RMarkdown + a package](https://github.com/kleinschmidt/r-packages/tree/c5e57de0b7ddc7968c8819fa904d00249934c055/example). 
+
+If you want a sense of how this might work IRL, the example is based on [this data package](https://github.com/kleinschmidt/phonetic-sup-unsup), which I've used for a couple of papers/presentations:
+
+* [CogSci2015](https://github.com/kleinschmidt/cogsci_2015)
+* [CUNY2015](https://github.com/kleinschmidt/cuny_2015)
+* [SVALP2016](https://github.com/kleinschmidt/svalp-2016)
+* [CogSci2016](https://github.com/kleinschmidt/cogsci_2016)
+
+I've also compiled a few packages based on donated data to streamline my own
+workflow, some of which the originators of the data have generously agreed to
+release publicly:
+
+* [hVd F1 and F2 from the Nationwide Speech Project](https://github.com/kleinschmidt/nspvowels)
+* [F1, F2, and F3 distributions from Heald and Nusbaum (2015,
+  _PLoS_)](https://github.com/kleinschmidt/healdvowels)
+* [word-intitial VOTs from a number of sources](https://github.com/kleinschmidt/votcorpora)
+
+# Packing up your data
+
+## Motivation
+
+An R package is the basic unit of reproducible code. There are lots of reasons you might want to make one:
+
+1. As a "personal library" of functions that you use across lots of projects (by copying and pasting).
+2. For ctual software that you want to share with others so they can use it, too (things like `lme4`).
+3. To hold data from your experiments in a way that's easy to use, easy to share, and reproducibly tracks how the data was processed.
+
+This guide focuses on the third use case. There are lots of good guides for the first case ([Hilary Parker's](https://hilaryparker.com/2014/04/29/writing-an-r-package-from-scratch/) is the classic), and if you're in the second camp you probably already know what you're doing (and if not, Hadley Wickham's [R packages book](http://r-pkgs.had.co.nz/) is an excellent and thorough guide).
+
+We'll start from what used to be my default workflow (raw data file + R scripts to process and make figures etc.), and end up with an R package that allows you to both easily access pre-processed data and tracks how that data was generated from the raw form.
+
+
+## Preliminaries
+
+1. Install Rstudio.
+2. Install `devtools`
+3. Have some data you want to package, plus code to read it into R and process it into a useable form (in a `.R` or `.Rmd` file, etc.)
+
+## What is a package?
+
+To a first approximation, a minimal package is 
+
+* a directory with 
+* some R code in `R/` and 
+* some metadata in `DESCRIPTION` (what the package is called, who made it, what it does, what other packages it depends on).
+
+When you load a package with `library` or `require`, R looks in the package directory and runs the stuff`.R` files in `R/`.
+
+## Packages can contain data
+
+If there's a `data/` subdirectory in the package directory, R will also make any data files[^datafiles] there available. In R, the dataset has the same name as the data file. There are (at least) three ways to access data from a package:
+
+### Using package namespace
+```{r , }
+ggplot2::diamonds %>% head()
+```
+
+### With `library()`
+
+Then you can refer to datasets directly
+
+```{r , }
+library(ggplot2)
+diamonds %>% head()
+```
+    
+But they're not added to the global environment:
+```{r , }
+ls()
+```
+
+### With `data()`
+
+This puts the requested dataset into the global environment:
+
+```{r , }
+data("diamonds", package="ggplot2")
+ls()
+```
+
+You can also get a listing of all the datasets in a package with `data(package="ggplot2")`
+
+[^datafiles]: Data files can be lots of things: `.RData`, `.csv`, `.R`, etc. See `?data`.
+
+## How do I make a package
+
+### Create the package skeleton
+
+#### With RStudio (the easy way) ####
+
+1. New Project -> New Directory -> R Package
+2. Pick the name for your package (only letters, numbers, and `.`), and where it'll live locally (defaults to `~/`, your home directory). 
+3. Check the "Create git repository" because why not.
+2. Click on the `DESCRIPTION` file, and edit it.
+3. Put your code files in the `R/` subdirectory.
+4. Load the package ("Build" tab, More -> Load all; or ⌘-⇧-L)
+
+#### With `devtools` (the slightly less easy way) ####
+
+The `devtools` package is the back-end that RStudio uses to set up your package. It provides a convenient set of functions for doing those steps manually if you don't like clicking on buttons (or don't want to use RStudio):
+
+1. Create the package skeleton with `devtools::create('~/mypackage')`.
+2. Edit the information in `DESCRIPTION`.
+3. Put your code in the `R/` subdirectory.
+
+#### Manually (the dangerous, masochistic way) ####
+
+You probably don't want to do this. These are the steps that `devtools` and RStudio automate for you.
+
+1. Create [the `DESCRIPTION` file](http://r-pkgs.had.co.nz/description.html) in your package-to-be directory.
+2. Create an `R/` subdirectory and put your code in there.
+
+### Package workflow
+
+The workflow when using a package is slightly different than you might be used to.
+
+#### Local workflow
+
+If you're just working within the package directory, [the steps are simple](http://r-pkgs.had.co.nz/r.html#r-workflow):
+
+1. Edit code (or add data).
+2. Re-load packge with `devtools::load_all()` (or ⌘-⇧-L in RStudio)
+
+#### Installed package workflow
+
+If you're working from an _installed_ package (e.g. to use across multiple projects), when you edit the package code you need to build, install, and reload it:
+
+1. Edit code (or add data).
+2. Re-generate documentation and namespace: `devtools::document('/path/to/pkg')`
+3. Install: `devtools::install('/path/to/pkg')`.
+4. Reload: `devtools::reload(inst('pkg'))`.
+
+Note that you only need to do this if you edit something in the _package_.
+
+### Documentation and exports
+
+By default, all the functions and variables that are created in your package are __private__ and not added to the global environment when you attach the package with `library()`. The `NAMESPACE` file tells R which things you want to export as part of the package's namespace. The easiest, best, and most foolproof way to generate this file is using special comments before each function/variable you want to export. For instance:
+
+```{r , eval=FALSE}
+
+#' Short description of what this does
+#'
+#' Longer description of what this does. Approximately a paragraph.
+#'
+#' @param x The first thing
+#' @param y The second thing.
+#' @return The thing that comes out of this function
+#'
+#' @export (do export this in NAMESPACE)
+a_function <- function(x,y) {
+  return x+y
+}
+
+```
+
+Then, you run `devtools::document()`, which will update `NAMESPACE` and create help files in, e.g., `man/a_function.Rd`. And you can call `mypackage::a_function()` now, or just `a_function()` after `library(myfunction)`.
+
+See the [R packages book on documentation](http://r-pkgs.had.co.nz/man.html) for more information on this. 
+
+For our purposes, this isn't strictly necessary (if you're just doing `devtools::load_all()`, but it's important to know for later if you want to share this or `devtools::install()` your package.
+
+## How do I put my data in the package
+
+### Manually (bad)
+
+1. Just move the data files (`.RData`, `.csv`, etc.) in the `data/` subdirectory of your package.
+
+Bam, your data is in your package.
+
+### Reproducibly, with `devtools` (good)
+
+The version of the data that's worth packaging is probably not pure, raw data, but data that's been cleaned, proccessed, summarized, or collated in some way. Just dropping pre-processed data files into your package is bad for the same reason that it's bad to do all your data analysis directly in the console: there's no record of what you've done, and there's no reliable way to reproduce it once you close R.
+
+The solution is the same: create a script that covers all the steps you took from beginning (loading a CSV) to end (putting the final data files in `data/`). By including this script in your package along with the raw data, you get the convenience of having easy, fast access to the pre-processed data __and__ all the benefits of reproducibility.
+
+Here's how:
+
+1. Create a home for your raw raw data and preprocessing scripts to live in:
+
+    ```{r eval=FALSE}
+    devtools::use_data_raw()
+    ```
+    ```
+    ## Creating data-raw/
+    ## Next: 
+    ## * Add data creation scripts in data-raw
+    ## * Use devtools::use_data() to add data to package
+    ```
+
+2. Move raw data into `data-raw/`
+3. Create an R script in `data-raw/` that reads in the raw data, processes it, and puts it where it belongs. Such a script might look like this:
+
+    ```{r , eval=FALSE}
+    experiment1 <-
+      read.csv('expt1.csv') %>%
+      mutate(experiment = 1)
+    devtools::use_data(experiment1)
+    ```
+
+    This saves `data/experiment1.RData` in your package directory (make sure you've `setwd()` to the package directory...)
+
+3. Run this script to actually use the data (with `source()` or ⌘-⇧-S in RStudio). Now when you load the package, the dataset will be available as `experiment1`, already processed:
+
+    ```{r , eval=FALSE}
+    devtools::load_all()
+    experiment1 %>% head()
+    ## or use data() to put it in the global environment
+    data("experiment1")
+    ```
+
+4. You can save as many versions of the data as you'd like. For instance, if you want to have easy access to a sumamrized version of the dataset, you can save that, too:
+
+    ```{r , eval=FALSE}
+    experiment1_summary <- 
+      experiment1 %>%
+      group_by(subject, condition, block) %>%
+      summarise(mean_rt = mean(rt))
+
+    devtools::use_data(experiment1_summary)
+    ```
+
+5. (Optionally): commit the script in git. In my (and [Hadley's](http://r-pkgs.had.co.nz/git.html)) opinion, using git to track changes in your code is always a good idea, and it's integrated right into RStudio. 
+
+    I also like to commit at least the processed data, and the raw data if it doesn't have personally identifiable information in it. You'll need to do this if you're going to distribute the package over github etc.  If the data files are very large, you can use something like [Git Large File Storage](https://github.com/blog/1986-announcing-git-large-file-storage-lfs).
+
+6. (Optionally): [Document your datasets](http://r-pkgs.had.co.nz/data.html). This works basically the same as documenting other objects, with the exception that the object you document is the name of the data set. The convention is to put these in `R/data.R`:
+
+    ```{r , eval=FALSE}
+    #' Data from Experiment 1
+    #'
+    #' This is data from the first experiment ever to try XYZ using Mechanical
+    #' Turk workers.
+    #'
+    #' @format A data frame with NNNN rows and NN variables:
+    #' \describe{
+    #'   \item{subject}{Anonymized Mechanical Turk Worker ID}
+    #'   \item{trial}{Trial number, from 1..NNN}
+    #'   ...
+    #' }
+    "experiment1"
+    ```
+
+    Writing this documentation is slightly annoying, but a __very good idea__ if you intend to share your data (and that includes with your advisor, students, labmates, or, especially, future-you)
+
+#### A few asides
+
+You can, of course, do all of this from the R console. But, again, for the sake of reproducibility, it's always better to put it in a script.
+
+These scripts doesn't _have_ to live in `data-raw/`, but that's where you put your raw data. And you don't want to run it every time the package is loaded, so __it shouldn't go in `R/`__.
+
+Even if you're packaging raw data, there's still a good reason to do it this way: `.RData` files are much faster to read from disk than text-based formats like CSV. So every time you use this data, you're saving a little bit of time (or a lot of time if your data is even medium sized). This reduces the friction associated with re-compiling your `.Rmd` files (say), or creating new sessions/`.Rmd` files for each analysis, which in turn makes it way easier to make sure your analysis is really reproducible and self-contained.
+
