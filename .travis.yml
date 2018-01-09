@@ -3,7 +3,7 @@ sudo: false
 os: linux
 cache: packages
 install:
-  - R -e 'install.packages(c("rmarkdown", "dplyr", "devtools", "ggplot2"))'
+  - R -e 'install.packages(c("rmarkdown", "magrittr", "devtools", "ggplot2"))'
 script: make index.html
 deploy:
   provider: pages
