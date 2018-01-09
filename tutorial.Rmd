@@ -6,7 +6,7 @@ date: 18 May, 2016
 
 ```{r preamble, echo=FALSE, results='hide', message=FALSE}
 
-library(dplyr)
+library(magrittr)
 library(devtools)
 
 knitr::opts_chunk$set(warning = FALSE,
